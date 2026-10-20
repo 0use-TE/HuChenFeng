@@ -565,9 +565,8 @@ html.ready .loading-mark { display: none; }
   left: 0;
   top: 0;
   width: 100%;
-  transform-style: preserve-3d;
-  transform-origin: left center;
   pointer-events: none;
+  transform-origin: 70% 0;
 }
 
 .flip.is-on { display: block; }
@@ -576,34 +575,30 @@ html.ready .loading-mark { display: none; }
   position: absolute;
   inset: 0;
   overflow: hidden;
-  backface-visibility: hidden;
   color: var(--ink);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 100px),
     linear-gradient(180deg, #ff3036 0%, #e10612 50%, #c81018 100%);
+  box-shadow: 0 18px 28px rgba(80, 0, 0, 0.28);
 }
 
-.flip-back { transform: rotateY(180deg); }
-
-.flip-face::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(90deg, rgba(80, 0, 0, 0.22), transparent 16%, transparent 78%, rgba(255, 255, 255, 0.14));
+.flip.fly-away {
+  animation: fly-away 1.25s cubic-bezier(0.33, 0.1, 0.25, 1) forwards;
 }
 
-.flip.turn-next { animation: turn-next 0.78s cubic-bezier(0.45, 0.05, 0.2, 1) forwards; }
-.flip.turn-prev { animation: turn-prev 0.78s cubic-bezier(0.45, 0.05, 0.2, 1) forwards; }
-
-@keyframes turn-next {
-  from { transform: rotateY(0deg); }
-  to { transform: rotateY(-180deg); }
-}
-
-@keyframes turn-prev {
-  from { transform: rotateY(-180deg); }
-  to { transform: rotateY(0deg); }
+@keyframes fly-away {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  28% {
+    transform: translate3d(4%, -6%, 0) rotate(2deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(34%, -125%, 0) rotate(12deg);
+    opacity: 0;
+  }
 }
 
 @media (max-width: 860px) {

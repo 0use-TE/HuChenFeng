@@ -318,20 +318,17 @@
     closeMenu();
   }
 
-  function flipTo(dir, html) {
+  function flyAway(html) {
     const flip = document.getElementById("flip");
     const oldHtml = sheet.innerHTML;
     const height = Math.max(sheet.offsetHeight, 480);
     sheet.innerHTML = html;
     settle(currentPath);
-    const newHtml = sheet.innerHTML;
-    const front = dir > 0 ? oldHtml : html;
-    const back = dir > 0 ? html : oldHtml;
     flip.style.height = height + "px";
     flip.className = "flip";
-    flip.innerHTML = '<div class="flip-face flip-front">' + front + '</div><div class="flip-face flip-back">' + back + "</div>";
+    flip.innerHTML = '<div class="flip-face">' + oldHtml + "</div>";
     void flip.offsetWidth;
-    flip.classList.add("is-on", dir > 0 ? "turn-next" : "turn-prev");
+    flip.classList.add("is-on", "fly-away");
   }
 
   function layoutFlow(root) {
@@ -387,7 +384,7 @@
   async function openPage(path, page, dir) {
     const token = ++requestId;
     document.documentElement.classList.remove("has-page");
-    const turning = Boolean(dir) && !reduced && !spread.hidden && sheet.querySelector(".page-flow");
+    const turning = dir > 0 && !reduced && !spread.hidden && Boolean(sheet.querySelector(".page-flow"));
     cover.hidden = true;
     spread.hidden = false;
     document.documentElement.classList.add("ready");
@@ -424,7 +421,7 @@
         '<nav class="pager"></nav><p class="folio"></p></div>';
       if (token !== requestId) return;
       sheet.classList.toggle("is-volume", volume);
-      if (turning) flipTo(dir, html);
+      if (turning) flyAway(html);
       else {
         sheet.innerHTML = html;
         settle(path);
@@ -527,7 +524,7 @@
     if (spread.hidden) return;
     event.preventDefault();
     const now = Date.now();
-    if (now - wheelAt < 700 || Math.abs(event.deltaY) < 8) return;
+    if (now - wheelAt < (event.deltaY > 0 ? 1100 : 180) || Math.abs(event.deltaY) < 8) return;
     const link = sheet.querySelector(event.deltaY > 0 ? "a.next" : "a.prev");
     if (!link) return;
     wheelAt = now;
