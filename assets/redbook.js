@@ -17,6 +17,7 @@
   let animating = false;
   let requestId = 0;
   let currentPath = "";
+  let currentPage = 0;
   const cache = new Map();
 
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -58,18 +59,29 @@
     return trimmed;
   }
 
-  function hashFor(path) {
+  function hashFor(path, page) {
     const clean = path.replace(/^\.\//, "");
-    return "#/" + clean.split("/").map(encodeURIComponent).join("/");
+    const hash = "#/" + clean.split("/").map(encodeURIComponent).join("/");
+    if (page === "last") return hash + "?p=last";
+    if (page > 0) return hash + "?p=" + page;
+    return hash;
   }
 
-  function pathFromHash() {
+  function readHash() {
     const raw = location.hash.replace(/^#\/?/, "");
-    if (!raw || raw === "cover") return "";
+    if (!raw || raw === "cover") return { path: "", page: 0 };
+    const splitAt = raw.indexOf("?");
+    const pathPart = splitAt === -1 ? raw : raw.slice(0, splitAt);
+    const query = splitAt === -1 ? "" : raw.slice(splitAt + 1);
+    let page = 0;
+    if (query) {
+      const value = new URLSearchParams(query).get("p");
+      page = value === "last" ? "last" : Math.max(0, parseInt(value || "0", 10) || 0);
+    }
     try {
-      return decodeURIComponent(raw);
+      return { path: decodeURIComponent(pathPart), page: page };
     } catch (err) {
-      return raw;
+      return { path: pathPart, page: page };
     }
   }
 
@@ -300,6 +312,7 @@
     cover.hidden = false;
     spread.hidden = true;
     currentPath = "";
+    currentPage = 0;
     document.title = "户晨风选集";
     document.documentElement.classList.add("ready");
     closeMenu();
@@ -310,6 +323,8 @@
     const oldHtml = sheet.innerHTML;
     const height = Math.max(sheet.offsetHeight, 480);
     sheet.innerHTML = html;
+    settle(currentPath);
+    const newHtml = sheet.innerHTML;
     const front = dir > 0 ? oldHtml : html;
     const back = dir > 0 ? html : oldHtml;
     flip.style.height = height + "px";
@@ -319,31 +334,66 @@
     flip.classList.add("is-on", dir > 0 ? "turn-next" : "turn-prev");
   }
 
-  function pager(index) {
-    const prev = index > 0 ? flat[index - 1] : null;
-    const next = index >= 0 && index < flat.length - 1 ? flat[index + 1] : null;
-    const prevHtml = prev
-      ? '<a class="prev" href="' + hashFor(prev.path) + '">上一页</a>'
-      : '<a class="prev" href="#/cover">封面</a>';
-    const nextHtml = next
-      ? '<a class="next" href="' + hashFor(next.path) + '">下一页</a>'
-      : '<span class="next edge">下一页</span>';
-    const folio = index >= 0 ? index + 1 : "";
-    return (
-      '<nav class="pager">' + prevHtml + '<span class="pager-star">★</span>' + nextHtml + "</nav>" +
-      '<p class="folio">' + folio + "</p>"
-    );
+  function layoutFlow(root) {
+    const win = root.querySelector(".page-window");
+    const flow = root.querySelector(".page-flow");
+    if (!win || !flow) return { page: 0, pages: 1 };
+    const width = win.clientWidth;
+    const height = win.clientHeight;
+    if (width < 20 || height < 20) return { page: 0, pages: 1 };
+    flow.style.columnWidth = width + "px";
+    flow.style.width = width + "px";
+    flow.style.height = height + "px";
+    const raw = flow.scrollWidth / width;
+    let pages = Math.max(1, Math.round(raw));
+    if (pages > 1 && raw - (pages - 1) < 0.08) pages -= 1;
+    let page = flow.dataset.page === "last" ? pages - 1 : Number(flow.dataset.page);
+    if (!Number.isFinite(page)) page = 0;
+    page = Math.min(Math.max(0, page), pages - 1);
+    flow.dataset.page = String(page);
+    flow.dataset.pages = String(pages);
+    flow.style.transform = "translateX(" + (-page * width) + "px)";
+    return { page: page, pages: pages };
   }
 
-  async function openPage(path, dir) {
+  function writePager(root, path, page, pages) {
+    const index = flat.findIndex((item) => item.path === path);
+    const prevDoc = index > 0 ? flat[index - 1] : null;
+    const nextDoc = index >= 0 && index < flat.length - 1 ? flat[index + 1] : null;
+    const prevHref = page > 0 ? hashFor(path, page - 1) : (prevDoc ? hashFor(prevDoc.path, "last") : "#/cover");
+    const prevLabel = page === 0 && !prevDoc ? "封面" : "上一页";
+    const nextHtml = page < pages - 1
+      ? '<a class="next" href="' + hashFor(path, page + 1) + '">下一页</a>'
+      : (nextDoc ? '<a class="next" href="' + hashFor(nextDoc.path) + '">下一页</a>' : '<span class="next edge">下一页</span>');
+    const nav = root.querySelector(".pager");
+    const folio = root.querySelector(".folio");
+    if (nav) nav.innerHTML = '<a class="prev" href="' + prevHref + '">' + prevLabel + '</a><span class="pager-star">★</span>' + nextHtml;
+    if (folio) folio.textContent = (page + 1) + " / " + pages;
+  }
+
+  function settle(path) {
+    const pager = sheet.querySelector(".pager");
+    if (pager && !pager.innerHTML) pager.innerHTML = '<span class="prev">上一页</span><span class="pager-star">★</span><span class="next">下一页</span>';
+    let laid = layoutFlow(sheet);
+    writePager(sheet, path, laid.page, laid.pages);
+    laid = layoutFlow(sheet);
+    writePager(sheet, path, laid.page, laid.pages);
+    currentPage = laid.page;
+    const canonical = hashFor(path, laid.page);
+    if (location.hash !== canonical) history.replaceState(null, "", canonical);
+    return laid;
+  }
+
+  async function openPage(path, page, dir) {
     const token = ++requestId;
     document.documentElement.classList.remove("has-page");
-    const turning = Boolean(dir) && !reduced && !spread.hidden && sheet.childElementCount > 0;
+    const turning = Boolean(dir) && !reduced && !spread.hidden && sheet.querySelector(".page-flow");
     cover.hidden = true;
     spread.hidden = false;
     document.documentElement.classList.add("ready");
     closeMenu();
     currentPath = path;
+    if (page !== "last") currentPage = page;
     const entry = flat.find((item) => item.path === path);
     const title = entry ? entry.title : path;
     topbarTitle.textContent = title;
@@ -365,18 +415,20 @@
       body.className = "body";
       body.innerHTML = renderMarkdown(source);
       paintSpeakers(body);
-      const index = flat.findIndex((item) => item.path === path);
+      const pageMark = page === "last" ? "last" : String(page || 0);
       const html =
         '<div class="page-inner"><p class="running">户晨风选集</p>' +
+        '<div class="page-window"><div class="page-flow" data-page="' + pageMark + '">' +
         heading +
-        '<div class="body">' + body.innerHTML + "</div>" +
-        pager(index) +
-        "</div>";
+        '<div class="body">' + body.innerHTML + "</div></div></div>" +
+        '<nav class="pager"></nav><p class="folio"></p></div>';
       if (token !== requestId) return;
       sheet.classList.toggle("is-volume", volume);
       if (turning) flipTo(dir, html);
-      else sheet.innerHTML = html;
-      window.scrollTo(0, 0);
+      else {
+        sheet.innerHTML = html;
+        settle(path);
+      }
     } catch (err) {
       if (token !== requestId) return;
       sheet.innerHTML = '<div class="page-inner"><p class="running">户晨风选集</p><p class="miss">这一页尚未印出</p></div>';
@@ -385,16 +437,21 @@
 
   function route() {
     if (animating) return;
-    const path = pathFromHash();
-    if (!path) {
+    const loc = readHash();
+    if (!loc.path) {
       showCover();
       return;
     }
     let dir = 0;
-    const from = flat.findIndex((item) => item.path === currentPath);
-    const to = flat.findIndex((item) => item.path === path);
-    if (from >= 0 && to >= 0 && from !== to) dir = to > from ? 1 : -1;
-    openPage(path, dir);
+    if (loc.path === currentPath && sheet.querySelector(".page-flow")) {
+      const nextPage = loc.page === "last" ? currentPage + 1 : loc.page;
+      if (nextPage !== currentPage) dir = nextPage > currentPage ? 1 : -1;
+    } else {
+      const from = flat.findIndex((item) => item.path === currentPath);
+      const to = flat.findIndex((item) => item.path === loc.path);
+      if (from >= 0 && to >= 0 && from !== to) dir = to > from ? 1 : -1;
+    }
+    openPage(loc.path, loc.page, dir);
   }
 
   function openBook() {
@@ -434,7 +491,7 @@
 
   search.addEventListener("input", () => {
     applyFilter();
-    if (!search.value.trim()) syncToc(pathFromHash());
+    if (!search.value.trim()) syncToc(readHash().path);
   });
 
   menuBtn.addEventListener("click", () => {
@@ -463,6 +520,45 @@
     flip.className = "flip";
     flip.innerHTML = "";
     flip.style.height = "";
+  });
+
+  let wheelAt = 0;
+  document.getElementById("leaf").addEventListener("wheel", (event) => {
+    if (spread.hidden) return;
+    event.preventDefault();
+    const now = Date.now();
+    if (now - wheelAt < 700 || Math.abs(event.deltaY) < 8) return;
+    const link = sheet.querySelector(event.deltaY > 0 ? "a.next" : "a.prev");
+    if (!link) return;
+    wheelAt = now;
+    location.hash = link.getAttribute("href");
+  }, { passive: false });
+
+  document.addEventListener("keydown", (event) => {
+    if (spread.hidden || event.target === search) return;
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown" || event.key === "PageDown";
+    const back = event.key === "ArrowLeft" || event.key === "ArrowUp" || event.key === "PageUp";
+    if (!forward && !back) return;
+    const link = sheet.querySelector(forward ? "a.next" : "a.prev");
+    if (!link) return;
+    event.preventDefault();
+    location.hash = link.getAttribute("href");
+  });
+
+  let touchX = 0;
+  document.getElementById("leaf").addEventListener("touchstart", (event) => {
+    touchX = event.changedTouches[0].clientX;
+  }, { passive: true });
+  document.getElementById("leaf").addEventListener("touchend", (event) => {
+    const dx = event.changedTouches[0].clientX - touchX;
+    if (Math.abs(dx) < 50) return;
+    const link = sheet.querySelector(dx < 0 ? "a.next" : "a.prev");
+    if (link) location.hash = link.getAttribute("href");
+  }, { passive: true });
+
+  window.addEventListener("resize", () => {
+    if (spread.hidden || !sheet.querySelector(".page-flow")) return;
+    settle(currentPath);
   });
 
   fetch(new URL("SUMMARY.md", base))
