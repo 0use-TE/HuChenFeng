@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#c81018">
+  <meta name="description" content="户晨风选集。直播文字稿全编，二〇二三年至二〇二五年。">
+  <title>户晨风选集</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/redbook.css">
+  <script>if (location.hash.replace(/^#\/?/, "") && location.hash !== "#/cover") document.documentElement.classList.add("has-page");</script>
+</head>
+<body>
+  <p id="loading" class="loading-mark">翻阅中</p>
+  <div id="cover" class="layer">
+    <div id="cover-board" class="board" tabindex="0" role="button" aria-label="翻开户晨风选集">
+      <div class="frame">
+        <div class="frame-inner">
+          <svg class="star" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4d2"/><stop offset="0.5" stop-color="#f0d48a"/><stop offset="1" stop-color="#b8923e"/></linearGradient></defs><polygon fill="url(#gold)" points="50,4 63,36 98,38 71,59 80,94 50,74 20,94 29,59 2,38 37,36"/></svg>
+          <h1 class="cover-title">户晨风选集</h1>
+          <div class="cover-rule" aria-hidden="true"></div>
+          <p class="cover-sub">文字稿全编</p>
+          <div class="cover-foot">
+            <p class="cover-years">二〇二三 — 二〇二五</p>
+            <p class="open-hint">翻开</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="spread" class="spread" hidden>
+    <div class="open-book">
+      <header class="topbar">
+        <button id="menu-btn" class="menu-btn" type="button" aria-expanded="false" aria-controls="toc">目录</button>
+        <span id="topbar-title" class="topbar-title">户晨风选集</span>
+      </header>
+      <div id="backdrop" class="backdrop"></div>
+      <aside id="toc" class="toc">
+        <div class="toc-head">
+          <svg class="star small" viewBox="0 0 100 100" aria-hidden="true"><polygon fill="#f0d48a" points="50,4 63,36 98,38 71,59 80,94 50,74 20,94 29,59 2,38 37,36"/></svg>
+          <a id="toc-home" class="toc-title" href="#/cover">户晨风选集</a>
+          <button id="back-cover" class="toc-back" type="button">封面</button>
+        </div>
+        <input id="search" class="search" type="search" placeholder="检索目录" autocomplete="off" enterkeyhint="search">
+        <nav id="toc-nav" class="toc-nav" aria-label="目录"></nav>
+      </aside>
+      <article id="sheet" class="sheet"></article>
+    </div>
+  </div>
+  <script src="assets/redbook.js"></script>
+</body>
+</html>
