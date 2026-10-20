@@ -16,6 +16,7 @@
   let flat = [];
   let animating = false;
   let requestId = 0;
+  let burnToken = 0;
   let currentPath = "";
   let currentPage = 0;
   const cache = new Map();
@@ -318,17 +319,199 @@
     closeMenu();
   }
 
-  function flyAway(html) {
+  function resetFlip(flip) {
+    const map = document.getElementById("crumple-map");
+    if (map) map.setAttribute("scale", "0");
+    flip.className = "flip";
+    flip.innerHTML = "";
+    flip.style.height = "";
+    flip.style.transform = "";
+    flip.style.opacity = "";
+  }
+
+  function clearBurn() {
+    burnToken += 1;
+    resetFlip(document.getElementById("flip"));
+  }
+
+  function burnField(cols) {
+    function hash(ix, iy) {
+      let n = Math.imul(ix, 374761393) + Math.imul(iy, 668265263);
+      n = Math.imul(n ^ (n >>> 13), 1274126177);
+      return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+    }
+    function fade(t) { return t * t * (3 - 2 * t); }
+    function at(x, y) {
+      const x0 = Math.floor(x);
+      const y0 = Math.floor(y);
+      const fx = fade(x - x0);
+      const fy = fade(y - y0);
+      const a = hash(x0, y0);
+      const b = hash(x0 + 1, y0);
+      const c = hash(x0, y0 + 1);
+      const d = hash(x0 + 1, y0 + 1);
+      return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
+    }
+    const wobble = new Float32Array(cols);
+    const tongue = new Float32Array(cols);
+    const seed = 1 + Math.floor(Math.random() * 40);
+    for (let x = 0; x < cols; x++) {
+      const broad = at(x / 16, seed);
+      const mid = at(x / 6, seed + 3.7);
+      const fine = at(x / 2.2, seed + 9.1);
+      wobble[x] = (broad - 0.5) * 0.36 + (mid - 0.5) * 0.16 + (fine - 0.5) * 0.06;
+      tongue[x] = 0.35 + fine * 0.95 + mid * 0.35;
+    }
+    return { wobble: wobble, tongue: tongue };
+  }
+
+  function burnAway(html) {
     const flip = document.getElementById("flip");
+    const token = ++burnToken;
     const oldHtml = sheet.innerHTML;
     const height = Math.max(sheet.offsetHeight, 480);
     sheet.innerHTML = html;
     settle(currentPath);
+    flip.className = "flip is-on burn";
     flip.style.height = height + "px";
-    flip.className = "flip";
-    flip.innerHTML = '<div class="flip-face">' + oldHtml + "</div>";
-    void flip.offsetWidth;
-    flip.classList.add("is-on", "fly-away");
+    flip.style.transform = "";
+    flip.style.opacity = "1";
+    flip.innerHTML = '<div class="flip-face">' + oldHtml + '</div><canvas class="burn-fire" aria-hidden="true"></canvas>';
+    const face = flip.querySelector(".flip-face");
+    const canvas = flip.querySelector(".burn-fire");
+    const map = document.getElementById("crumple-map");
+    const noise = document.getElementById("crumple-noise");
+    if (noise) noise.setAttribute("seed", String(1 + Math.floor(Math.random() * 80)));
+    if (map) map.setAttribute("scale", "0");
+    const width = Math.max(flip.clientWidth, 2);
+    const viewH = Math.max(flip.clientHeight, 2);
+    if (width < 8 || viewH < 8) {
+      resetFlip(flip);
+      return;
+    }
+    face.style.clipPath = "polygon(0px 0px, " + width + "px 0px, " + width + "px " + viewH + "px, 0px " + viewH + "px)";
+    canvas.width = Math.round(width);
+    canvas.height = Math.round(viewH);
+    const ctx = canvas.getContext("2d");
+    const cols = Math.max(72, Math.round(width / 5));
+    const field = burnField(cols);
+    const step = width / cols;
+    const embers = [];
+    const ashes = [];
+    const crumpleMs = 720;
+    const burnStart = 900;
+    const burnMs = 1700;
+    const fadeMs = 360;
+    let last = performance.now();
+    let elapsed = 0;
+
+    function frontAt(x, burnT) {
+      const eaten = burnT * 1.46 + field.wobble[x];
+      return viewH * (1 - Math.min(1, Math.max(0, eaten)));
+    }
+
+    function frame(now) {
+      if (token !== burnToken) return;
+      elapsed += Math.min(50, now - last);
+      last = now;
+      const crumple = Math.min(1, elapsed / crumpleMs);
+      const ease = crumple * crumple * (3 - 2 * crumple);
+      if (map) map.setAttribute("scale", (ease * 38).toFixed(2));
+      const burnT = Math.max(0, Math.min(1, (elapsed - burnStart) / burnMs));
+      const shake = burnT > 0 && burnT < 1 ? Math.sin(elapsed * 0.05) * 0.55 * (1 - burnT) : 0;
+      flip.style.transform = "scale(" + (1 - ease * 0.05).toFixed(4) + ") rotate(" + (-1.6 * ease + shake).toFixed(3) + "deg)";
+      if (burnT > 0) face.style.filter = "sepia(" + (burnT * 0.65).toFixed(3) + ") brightness(" + (1 - burnT * 0.22).toFixed(3) + ")";
+
+      const fronts = new Float32Array(cols);
+      for (let x = 0; x < cols; x++) fronts[x] = burnT > 0 ? frontAt(x, burnT) : viewH;
+      const parts = ["0px 0px", width.toFixed(1) + "px 0px", width.toFixed(1) + "px " + fronts[cols - 1].toFixed(1) + "px"];
+      for (let x = cols - 1; x >= 0; x--) parts.push((x * step).toFixed(1) + "px " + fronts[x].toFixed(1) + "px");
+      face.style.clipPath = "polygon(" + parts.join(",") + ")";
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (burnT > 0) {
+        ctx.globalCompositeOperation = "lighter";
+        for (let x = 0; x < cols; x++) {
+          const y = fronts[x];
+          if (y >= viewH - 0.5) continue;
+          const flick = 0.72 + 0.28 * Math.sin(elapsed * 0.02 + x * 0.73);
+          const fh = (28 + field.tongue[x] * 52) * flick * Math.min(1, burnT * 3.2);
+          const grad = ctx.createLinearGradient(0, y, 0, y + fh);
+          grad.addColorStop(0, "rgba(255, 250, 224, 0.96)");
+          grad.addColorStop(0.28, "rgba(255, 150, 24, 0.92)");
+          grad.addColorStop(1, "rgba(170, 16, 0, 0)");
+          ctx.fillStyle = grad;
+          ctx.fillRect(x * step - 3, y, step + 6, fh);
+        }
+        ctx.globalCompositeOperation = "source-over";
+        for (let x = 0; x < cols; x++) {
+          const y = fronts[x];
+          if (y >= viewH - 0.5) continue;
+          ctx.fillStyle = "rgba(36, 8, 0, 0.88)";
+          ctx.fillRect(x * step - 1, y - 9, step + 2, 9);
+          ctx.fillStyle = "rgba(255, 232, 170, 0.96)";
+          ctx.fillRect(x * step - 1, y - 2, step + 2, 3);
+        }
+        if (embers.length < 52 && Math.random() < 0.9) {
+          const x = Math.floor(Math.random() * cols);
+          embers.push({
+            x: x * step + Math.random() * step,
+            y: fronts[x] + Math.random() * 6,
+            vy: -0.75 - Math.random() * 1.6,
+            vx: (Math.random() - 0.5) * 0.75,
+            life: 0.65 + Math.random() * 0.55,
+            r: 1 + Math.random() * 1.6
+          });
+        }
+        if (ashes.length < 28 && burnT > 0.12 && Math.random() < 0.45) {
+          const x = Math.floor(Math.random() * cols);
+          ashes.push({
+            x: x * step,
+            y: fronts[x] + 4,
+            vy: 0.3 + Math.random() * 0.9,
+            vx: (Math.random() - 0.5) * 0.9,
+            life: 1,
+            s: 2 + Math.random() * 3.2,
+            rot: Math.random() * 6
+          });
+        }
+        for (let i = embers.length - 1; i >= 0; i--) {
+          const ember = embers[i];
+          ember.x += ember.vx;
+          ember.y += ember.vy;
+          ember.life -= 0.011;
+          if (ember.life <= 0) {
+            embers.splice(i, 1);
+            continue;
+          }
+          ctx.fillStyle = "rgba(255," + Math.floor(130 + ember.life * 100) + ",36," + ember.life.toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.arc(ember.x, ember.y, ember.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        for (let i = ashes.length - 1; i >= 0; i--) {
+          const ash = ashes[i];
+          ash.x += ash.vx;
+          ash.y += ash.vy;
+          ash.rot += 0.05;
+          ash.life -= 0.01;
+          if (ash.life <= 0 || ash.y > viewH) {
+            ashes.splice(i, 1);
+            continue;
+          }
+          ctx.save();
+          ctx.translate(ash.x, ash.y);
+          ctx.rotate(ash.rot);
+          ctx.fillStyle = "rgba(32, 18, 14," + (ash.life * 0.9).toFixed(3) + ")";
+          ctx.fillRect(-ash.s / 2, -ash.s / 2, ash.s, ash.s * 0.65);
+          ctx.restore();
+        }
+      }
+      if (elapsed > burnStart + burnMs) flip.style.opacity = String(Math.max(0, 1 - (elapsed - burnStart - burnMs) / fadeMs));
+      if (elapsed < burnStart + burnMs + fadeMs) requestAnimationFrame(frame);
+      else if (token === burnToken) resetFlip(flip);
+    }
+    requestAnimationFrame(frame);
   }
 
   function layoutFlow(root) {
@@ -398,6 +581,7 @@
     syncToc(path);
     const volume = /年\d{2}月\/README\.md$/.test(path) || /年\d{2}月\/README\.md$/.test(decodeURIComponent(path));
     if (!turning) {
+      clearBurn();
       sheet.classList.toggle("is-volume", volume);
       sheet.innerHTML = '<div class="page-inner"><p class="running">户晨风选集</p><p class="miss">翻阅中</p></div>';
     }
@@ -421,7 +605,7 @@
         '<nav class="pager"></nav><p class="folio"></p></div>';
       if (token !== requestId) return;
       sheet.classList.toggle("is-volume", volume);
-      if (turning) flyAway(html);
+      if (turning) burnAway(html);
       else {
         sheet.innerHTML = html;
         settle(path);
@@ -512,11 +696,8 @@
   document.getElementById("toc-home").addEventListener("click", goCover);
   document.getElementById("back-cover").addEventListener("click", goCover);
   document.getElementById("flip").addEventListener("animationend", (event) => {
-    if (event.target.id !== "flip") return;
-    const flip = event.target;
-    flip.className = "flip";
-    flip.innerHTML = "";
-    flip.style.height = "";
+    if (event.target.id !== "flip" || event.target.classList.contains("burn")) return;
+    resetFlip(event.target);
   });
 
   let wheelAt = 0;
@@ -524,7 +705,7 @@
     if (spread.hidden) return;
     event.preventDefault();
     const now = Date.now();
-    if (now - wheelAt < (event.deltaY > 0 ? 1100 : 180) || Math.abs(event.deltaY) < 8) return;
+    if (now - wheelAt < (event.deltaY > 0 ? 2800 : 180) || Math.abs(event.deltaY) < 8) return;
     const link = sheet.querySelector(event.deltaY > 0 ? "a.next" : "a.prev");
     if (!link) return;
     wheelAt = now;

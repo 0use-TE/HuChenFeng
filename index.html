@@ -8,10 +8,16 @@
   <title>户晨风选集</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="preload" href="assets/fonts/maoti.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="assets/redbook.css?v=4">
+  <link rel="stylesheet" href="assets/redbook.css?v=7">
   <script>if (location.hash.replace(/^#\/?/, "") && location.hash !== "#/cover") document.documentElement.classList.add("has-page");</script>
 </head>
 <body>
+  <svg class="fx-defs" width="0" height="0" aria-hidden="true">
+    <filter id="crumple" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feTurbulence id="crumple-noise" type="turbulence" baseFrequency="0.011 0.026" numOctaves="4" seed="2" result="noise"></feTurbulence>
+      <feDisplacementMap id="crumple-map" in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
+    </filter>
+  </svg>
   <p id="loading" class="loading-mark">翻阅中</p>
   <div id="cover" class="layer">
     <div id="cover-board" class="board" tabindex="0" role="button" aria-label="翻开户晨风选集">
@@ -52,6 +58,6 @@
       </div>
     </div>
   </div>
-  <script src="assets/redbook.js?v=4"></script>
+  <script src="assets/redbook.js?v=7"></script>
 </body>
 </html>
