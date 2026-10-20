@@ -16,6 +16,7 @@
   let flat = [];
   let animating = false;
   let requestId = 0;
+  let currentPath = "";
   const cache = new Map();
 
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -298,9 +299,24 @@
     document.documentElement.classList.remove("has-page");
     cover.hidden = false;
     spread.hidden = true;
+    currentPath = "";
     document.title = "户晨风选集";
     document.documentElement.classList.add("ready");
     closeMenu();
+  }
+
+  function flipTo(dir, html) {
+    const flip = document.getElementById("flip");
+    const oldHtml = sheet.innerHTML;
+    const height = Math.max(sheet.offsetHeight, 480);
+    sheet.innerHTML = html;
+    const front = dir > 0 ? oldHtml : html;
+    const back = dir > 0 ? html : oldHtml;
+    flip.style.height = height + "px";
+    flip.className = "flip";
+    flip.innerHTML = '<div class="flip-face flip-front">' + front + '</div><div class="flip-face flip-back">' + back + "</div>";
+    void flip.offsetWidth;
+    flip.classList.add("is-on", dir > 0 ? "turn-next" : "turn-prev");
   }
 
   function pager(index) {
@@ -319,28 +335,30 @@
     );
   }
 
-  async function openPage(path) {
+  async function openPage(path, dir) {
     const token = ++requestId;
     document.documentElement.classList.remove("has-page");
+    const turning = Boolean(dir) && !reduced && !spread.hidden && sheet.childElementCount > 0;
     cover.hidden = true;
     spread.hidden = false;
     document.documentElement.classList.add("ready");
     closeMenu();
+    currentPath = path;
     const entry = flat.find((item) => item.path === path);
     const title = entry ? entry.title : path;
     topbarTitle.textContent = title;
     document.title = title + " · 户晨风选集";
     syncToc(path);
-    sheet.classList.toggle("is-volume", /年\d{2}月\/README\.md$/.test(path) || /年\d{2}月\/README\.md$/.test(decodeURIComponent(path)));
-    sheet.innerHTML = '<div class="page-inner"><p class="running">户晨风选集</p><p class="miss">翻阅中</p></div>';
+    const volume = /年\d{2}月\/README\.md$/.test(path) || /年\d{2}月\/README\.md$/.test(decodeURIComponent(path));
+    if (!turning) {
+      sheet.classList.toggle("is-volume", volume);
+      sheet.innerHTML = '<div class="page-inner"><p class="running">户晨风选集</p><p class="miss">翻阅中</p></div>';
+    }
     try {
       let source = await load(path);
       if (token !== requestId) return;
-      const volume = /\/README\.md$/.test(path) && /^\d{4}年\d{2}月$/.test(title);
-      if (volume) {
-        source = source.replace(/^#\s+.+$/m, "# " + formatTitle(title));
-        sheet.classList.add("is-volume");
-      }
+      const volumePage = /\/README\.md$/.test(path) && /^\d{4}年\d{2}月$/.test(title);
+      if (volumePage) source = source.replace(/^#\s+.+$/m, "# " + formatTitle(title));
       const startsWithHeading = /^#\s+/m.test(source.trim());
       const heading = startsWithHeading ? "" : "<h1>" + escapeHtml(formatTitle(title)) + "</h1>";
       const body = document.createElement("div");
@@ -348,12 +366,16 @@
       body.innerHTML = renderMarkdown(source);
       paintSpeakers(body);
       const index = flat.findIndex((item) => item.path === path);
-      sheet.innerHTML =
+      const html =
         '<div class="page-inner"><p class="running">户晨风选集</p>' +
         heading +
         '<div class="body">' + body.innerHTML + "</div>" +
         pager(index) +
         "</div>";
+      if (token !== requestId) return;
+      sheet.classList.toggle("is-volume", volume);
+      if (turning) flipTo(dir, html);
+      else sheet.innerHTML = html;
       window.scrollTo(0, 0);
     } catch (err) {
       if (token !== requestId) return;
@@ -364,8 +386,15 @@
   function route() {
     if (animating) return;
     const path = pathFromHash();
-    if (!path) showCover();
-    else openPage(path);
+    if (!path) {
+      showCover();
+      return;
+    }
+    let dir = 0;
+    const from = flat.findIndex((item) => item.path === currentPath);
+    const to = flat.findIndex((item) => item.path === path);
+    if (from >= 0 && to >= 0 && from !== to) dir = to > from ? 1 : -1;
+    openPage(path, dir);
   }
 
   function openBook() {
@@ -428,6 +457,13 @@
 
   document.getElementById("toc-home").addEventListener("click", goCover);
   document.getElementById("back-cover").addEventListener("click", goCover);
+  document.getElementById("flip").addEventListener("animationend", (event) => {
+    if (event.target.id !== "flip") return;
+    const flip = event.target;
+    flip.className = "flip";
+    flip.innerHTML = "";
+    flip.style.height = "";
+  });
 
   fetch(new URL("SUMMARY.md", base))
     .then((response) => response.text())

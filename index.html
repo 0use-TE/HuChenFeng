@@ -7,6 +7,7 @@
   <meta name="description" content="户晨风选集。直播文字稿全编，二〇二三年至二〇二五年。">
   <title>户晨风选集</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/maoti.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/redbook.css">
   <script>if (location.hash.replace(/^#\/?/, "") && location.hash !== "#/cover") document.documentElement.classList.add("has-page");</script>
 </head>
@@ -45,7 +46,10 @@
         <input id="search" class="search" type="search" placeholder="检索目录" autocomplete="off" enterkeyhint="search">
         <nav id="toc-nav" class="toc-nav" aria-label="目录"></nav>
       </aside>
-      <article id="sheet" class="sheet"></article>
+      <div class="leaf" id="leaf">
+        <article id="sheet" class="sheet"></article>
+        <div id="flip" class="flip" aria-hidden="true"></div>
+      </div>
     </div>
   </div>
   <script src="assets/redbook.js"></script>
